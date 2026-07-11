@@ -99,7 +99,11 @@ export function QuickCreatePopover({
   return (
     <div
       ref={ref}
-      className="absolute z-20"
+      // Fix 2 (z-index): z-40 (było z-20) — musi renderować się NAD kartami
+      // (z-10/z-20) i nad łącznikiem "teraz"/liniami focusa (z-10, patrz
+      // PlannerGrid), ale pod sticky nagłówkami dnia/osi (z-50), które mają
+      // maskować wszystko, co przewinie się pod nie.
+      className="absolute z-40"
       style={{ top: position.top, left: position.left }}
       // Kolumna dnia nasłuchuje pointerdown/up do rysowania nowych bloków —
       // bez stopPropagation kliknięcie w pole formularza startowałoby nowe

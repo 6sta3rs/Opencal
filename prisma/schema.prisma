@@ -27,6 +27,7 @@ model RecurringBlock {
   departureTime DateTime?
   overnightStart DateTime?
   isPaused      Boolean   @default(false)
+  note          String?
   exceptions    BlockInstanceException[]
 }
 

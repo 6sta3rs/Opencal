@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { findNearestShift, formatBlockHours } from "./sidebar";
+import { findNearestShift, formatBlockHours, weeklyHoursByType } from "./sidebar";
 
 it("znajduje najbliższą nadchodzącą zmianę spośród bloków", () => {
   const now = new Date("2026-07-06T08:00:00"); // poniedziałek 08:00
@@ -98,4 +98,31 @@ it("formatuje długość bloku nocnego przechodzącego przez północ", () => {
 
 it("formatuje niepełne godziny z przecinkiem", () => {
   expect(formatBlockHours("09:00", "12:30")).toBe("3,5h");
+});
+
+it("sumuje godziny w tygodniu wg typu bloku", () => {
+  const now = new Date("2026-07-06T08:00:00"); // poniedziałek
+
+  const blocks = [
+    {
+      id: "praca",
+      name: "Praca",
+      type: "work",
+      startTime: "09:00",
+      endTime: "17:00",
+      daysOfWeek: [1, 3], // pon + śr, 8h każda -> 16h
+      endDate: null,
+    },
+    {
+      id: "kurs",
+      name: "Wykład",
+      type: "course",
+      startTime: "18:00",
+      endTime: "20:00",
+      daysOfWeek: [2], // wt, 2h
+      endDate: null,
+    },
+  ];
+
+  expect(weeklyHoursByType(blocks, now)).toEqual({ work: 16, course: 2 });
 });

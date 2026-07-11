@@ -1,4 +1,22 @@
 /*
+ * Fix 4: prawy offset dymka czatu + jego panelu — domyślnie 1.5rem (dawne
+ * Tailwind "right-6"), rozszerzony o szerokość sidebara plannera, gdy ten
+ * jest zamontowany (custom property na :root, patrz PlannerSidebar.tsx).
+ * Przejście na "right" żeby dymek podążał płynnie za zwijaniem/rozwijaniem
+ * sidebara zamiast skakać.
+ */
+.floatingAnchor {
+  right: calc(1.5rem + var(--planner-sidebar-w, 0px));
+  transition: right 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floatingAnchor {
+    transition: none !important;
+  }
+}
+
+/*
  * transitions-dev "panel reveal" pattern (fade + slide-up + cross-blur),
  * scoped locally since app/globals.css (the shared :root install block) is
  * owned by a concurrent agent right now — same approach previously used in

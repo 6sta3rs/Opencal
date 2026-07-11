@@ -1,6 +1,9 @@
 import { getInstances } from "./recurrence";
 import type { AvailabilityDay } from "./availability";
 
+/** Zmiana 4: filtr widoczności cykliczne/jednorazowe w sidebarze — bliźniaczy wzorzec do visibleTypes (BLOCK_TYPES). */
+export type RecurrenceFilter = "recurring" | "oneoff";
+
 export type PlannerBlock = {
   id: string;
   name: string;
@@ -18,6 +21,9 @@ export type PlannerBlock = {
   // Jawny, niezależny start okresu noclegu (odsprzęgnięty od końca zmiany) —
   // patrz komentarz przy hasOvernightExtension w computeGridSegments.
   overnightStart?: Date | string | null;
+  // Fix 2b: notatka dowolnej treści — pokazywana w nagłówku fokusa w
+  // sidebarze i (gdy karta ma na to miejsce) jako dodatkowa linia na siatce.
+  note?: string | null;
   exceptions?: {
     date: Date | string;
     startTime?: string | null;
@@ -345,6 +351,64 @@ export function layoutOverlaps(segments: GridSegment[]): LaidOutSegment[] {
 }
 
 /**
+ * Fix 3: najbliższy wolny start (minuty od północy) dla kandydata, którego
+ * PEŁNA OBWIEDNIA (start − bufferBefore .. start + duration + bufferAfter)
+ * nie może nakładać się na obwiednię ŻADNEGO innego bloku tego dnia (segmenty
+ * "shift" + "buffer" tego bloku, zbite w jeden zakres min..max — "overnight"
+ * ignorowany, tak jak w classifyOverlap). Szuka symetrycznie w obie strony od
+ * żądanego startu, krok SNAP_MINUTES, aż trafi wolne miejsce albo wyjdzie poza
+ * dobę (0..1440) w obu kierunkach naraz -> null (dzień pełny).
+ *
+ * Używane przez block-vs-block move (endMoveDrag) zamiast dawnego
+ * classifyOverlap+abort — bufory między dwiema ETYKIETAMI nigdy się już nie
+ * nakładają. Backlog-drop nadal woła to tylko przy prawdziwym konflikcie
+ * rdzeni (classifyOverlap === "conflict"), z bufferBefore/bufferAfter=0 —
+ * dotychczasowa tolerancja "over-buffer" dla małych zadań zostaje nietknięta,
+ * patrz PlannerGrid#handleGridDrop.
+ */
+export function snapToNearestFreeSlot(
+  daySegments: GridSegment[],
+  candidate: {
+    startMinutes: number;
+    durationMinutes: number;
+    bufferBefore: number;
+    bufferAfter: number;
+    excludeBlockId?: string;
+  },
+): number | null {
+  const envelopesByBlock = new Map<string, { start: number; end: number }>();
+  for (const s of daySegments) {
+    if (s.phase === "overnight" || s.blockId === candidate.excludeBlockId) continue;
+    const existing = envelopesByBlock.get(s.blockId);
+    if (existing) {
+      existing.start = Math.min(existing.start, s.startMinutes);
+      existing.end = Math.max(existing.end, s.endMinutes);
+    } else {
+      envelopesByBlock.set(s.blockId, { start: s.startMinutes, end: s.endMinutes });
+    }
+  }
+  const occupied = [...envelopesByBlock.values()];
+
+  function fits(start: number): boolean {
+    const envStart = start - candidate.bufferBefore;
+    const envEnd = start + candidate.durationMinutes + candidate.bufferAfter;
+    if (envStart < 0 || envEnd > 24 * 60) return false;
+    return !occupied.some((o) => envStart < o.end && o.start < envEnd);
+  }
+
+  const requested = snapMinutes(candidate.startMinutes);
+  if (fits(requested)) return requested;
+
+  for (let delta = SNAP_MINUTES; delta <= 24 * 60; delta += SNAP_MINUTES) {
+    const later = requested + delta;
+    const earlier = requested - delta;
+    if (later <= 24 * 60 && fits(later)) return later;
+    if (earlier >= 0 && fits(earlier)) return earlier;
+  }
+  return null;
+}
+
+/**
  * Klasyfikuje kandydata (nowy blok albo przesunięcie/upuszczenie istniejącego)
  * względem segmentów dnia (Task D1) — "conflict" wygrywa nad "over-buffer":
  * osoba nie może robić dwóch rzeczy naraz, ale kolizja tylko z buforem
@@ -393,6 +457,13 @@ export function focusBoundaryMinutes(
   if (bufferAfter) boundaries.add(bufferAfter.endMinutes);
   return [...boundaries].sort((a, b) => a - b);
 }
+
+// Fix 7: klucze localStorage dla ustawień plannera (linia "teraz" / tryb
+// etykiet granic) — mieszkają tu (zamiast w PlannerGrid.tsx) bo teraz czyta
+// i pisze je też app/ustawienia/page.tsx, nie tylko sam grid.
+export const NOW_LINE_STORAGE_KEY = "planner-grid-show-now-line";
+export const BOUNDARY_LABELS_STORAGE_KEY = "planner-grid-boundary-labels";
+export type BoundaryLabelMode = "all" | "outer";
 
 export const SNAP_MINUTES = 15;
 
@@ -586,6 +657,46 @@ export function buildResizeBlockPatch(
   return { startTime: minutesToHHMM(s) };
 }
 
+/**
+ * Fix (resize buforów za zewnętrzną krawędzią scalonej karty): przeciąganie
+ * SAMEJ zewnętrznej krawędzi (góra strefy dojazdu / dół strefy odjazdu) nie
+ * rusza startTime/endTime zmiany — zmienia tylko długość bufora, liczoną jako
+ * odległość między nową pozycją zewnętrznej krawędzi a stałą granicą zmiany.
+ * `newOuterMinutes` to minuty pod kursorem (przycinane do siatki SNAP_MINUTES
+ * tutaj, jak w buildResizeBlockPatch). Ujemny wynik (przeciągnięcie ZA
+ * granicę zmiany) przycięty do 0 — bufor nie może być ujemny, zero-długości
+ * bufor to po prostu "brak bufora".
+ */
+export function buildBufferResizePatch(
+  block: { startTime: string; endTime: string },
+  edge: "before" | "after",
+  newOuterMinutes: number,
+): { bufferBefore: number } | { bufferAfter: number } {
+  const snapped = snapMinutes(newOuterMinutes);
+  if (edge === "before") {
+    return { bufferBefore: Math.max(0, hhmmToMinutes(block.startTime) - snapped) };
+  }
+  return { bufferAfter: Math.max(0, snapped - hhmmToMinutes(block.endTime)) };
+}
+
+/**
+ * Etykieta strefy dojazdu/odjazdu: znak (kierunek) + czas trwania + godzina
+ * graniczna zegarowa (dla "before" — start strefy, czyli "musisz wyjechać o";
+ * dla "after" — koniec strefy, czyli "wolny dopiero o"). Słowa "Dojazd"/
+ * "Odjazd" celowo pominięte na obu poziomach szczegółowości — sam znak
+ * (−/+) niesie kierunek jednoznacznie, patrz DESIGN.md. "compact" pomija
+ * słowo "min", żeby zmieścić się w niższych/węższych strefach.
+ */
+export function formatBufferLabel(
+  kind: "before" | "after",
+  minutes: number,
+  boundaryHHMM: string,
+  mode: "compact" | "full",
+): string {
+  const sign = kind === "before" ? "−" : "+";
+  return mode === "compact" ? `${sign}${minutes} · ${boundaryHHMM}` : `${sign}${minutes} min · ${boundaryHHMM}`;
+}
+
 /** Przesuwa start+koniec bloku o deltę minut (dodatnią lub ujemną), zachowując czas trwania i zawijając przez północ (mod 24h). */
 export function shiftBlockTime(
   block: { startTime: string; endTime: string },
@@ -659,16 +770,20 @@ export function getUnavailableRangesFromAvailability(
 
 export type BlocksAction =
   | { kind: "patch"; id: string; patch: Partial<PlannerBlock> }
-  | { kind: "add"; block: PlannerBlock };
+  | { kind: "add"; block: PlannerBlock }
+  | { kind: "remove"; id: string };
 
 /**
  * Reducer dla useOptimistic w PlannerGrid: aplikuje zmianę na liście bloków
  * natychmiast (przed odpowiedzią serwera). "patch" scala pola w blok o
  * pasującym id (no-op gdy id nieznane — np. blok już usunięty gdzie indziej);
- * "add" dokleja nowy (tymczasowy) blok na koniec, używane przy drop backlogu.
+ * "add" dokleja nowy (tymczasowy) blok na koniec, używane przy drop backlogu;
+ * "remove" usuwa blok o pasującym id (no-op gdy nieznane), używane przy
+ * optymistycznym DELETE z BlockEditForm.
  */
 export function applyBlocksAction(state: PlannerBlock[], action: BlocksAction): PlannerBlock[] {
   if (action.kind === "add") return [...state, action.block];
+  if (action.kind === "remove") return state.filter((b) => b.id !== action.id);
   return state.map((b) => (b.id === action.id ? { ...b, ...action.patch } : b));
 }
 
@@ -682,4 +797,28 @@ export function isDayAvailableForCreate(day: Date, availability?: AvailabilityDa
   if (!availability) return true;
   const entry = availability.find((a) => a.dayOfWeek === day.getDay());
   return !!entry?.enabled;
+}
+
+/**
+ * Fix 6: pozycja startowa pionowego scrolla siatki na montaż (minuty od
+ * północy) — najwcześniejszy interesujący punkt zamiast zawsze 00:00.
+ * Z segmentami (dowolnej fazy, w tym bufory dojazdu — stąd wywołujący
+ * przekazuje WSZYSTKIE segmenty widocznego tygodnia, nie tylko "shift"):
+ * najwcześniejszy start minus pół godziny zapasu, przycięty do >=0. Bez
+ * segmentów: najwcześniejsza włączona godzina dostępności, a gdy jej też
+ * brak — 08:00 (480 min) jako rozsądny domyślny punkt dnia roboczego.
+ */
+export function initialScrollMinutes(
+  segments: { startMinutes: number }[],
+  availability?: AvailabilityDay[],
+): number {
+  if (segments.length > 0) {
+    const earliest = Math.min(...segments.map((s) => s.startMinutes));
+    return Math.max(0, earliest - 30);
+  }
+  const enabledStarts = (availability ?? [])
+    .filter((a) => a.enabled)
+    .map((a) => hhmmToMinutes(a.startTime));
+  if (enabledStarts.length > 0) return Math.min(...enabledStarts);
+  return 480;
 }

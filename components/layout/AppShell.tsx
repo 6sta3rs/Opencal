@@ -12,10 +12,11 @@ const NAV_ITEMS = [
   { href: "/dostepnosc", label: "Dostępność", Icon: CalendarClock },
 ];
 
-// ponytail: "Ustawienia" nie ma jeszcze strony (Faza 2) — statyczna,
-// wyłączona pozycja nawigacji zamiast martwego linku. Renderowana osobno,
-// przypięta do dołu szyny (patrz mt-auto niżej), nie w głównej liście.
-const SETTINGS_ITEM = { label: "Ustawienia", Icon: Settings };
+// Fix 7: /ustawienia teraz istnieje (patrz app/ustawienia/page.tsx) — ten
+// wpis dostał więc prawdziwy link. Renderowany osobno, przypięty do dołu
+// szyny (patrz mt-auto niżej), nie w głównej liście NAV_ITEMS, żeby zostać
+// wizualnie oddzielony jak dawniej.
+const SETTINGS_ITEM = { href: "/ustawienia", label: "Ustawienia", Icon: Settings };
 
 // Chrome aplikacji w stylu Cal.com: stała, ciemna szyna nawigacji po lewej +
 // obszar treści po prawej. Zastępuje dawny Topbar — nagłówki stron (tytuł,
@@ -74,22 +75,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             spodu, nad stopką, zamiast siedzieć zaraz pod resztą linków. */}
         <ul className="mt-auto flex flex-col gap-0.5 px-2 pb-2">
           <li>
-            <span
-              aria-disabled="true"
+            <Link
+              href={SETTINGS_ITEM.href}
+              aria-current={pathname === SETTINGS_ITEM.href ? "page" : undefined}
               title={collapsed ? SETTINGS_ITEM.label : undefined}
-              className={`flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-body text-text-secondary opacity-50 ${
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-body transition-colors ${
                 collapsed ? "justify-center px-0" : ""
+              } ${
+                pathname === SETTINGS_ITEM.href
+                  ? "bg-border text-text-primary"
+                  : "text-text-secondary hover:bg-border/50 hover:text-text-primary"
               }`}
             >
               <SETTINGS_ITEM.Icon className="h-4 w-4 shrink-0" aria-hidden />
               {!collapsed && SETTINGS_ITEM.label}
-            </span>
+            </Link>
           </li>
         </ul>
 
         {!collapsed && (
           <div className="border-t border-border px-4 py-3 text-caption font-caption text-text-secondary">
-            Kalendarz — MVP
+            <div>Kalendarz — MVP</div>
+            {/* Fix 3: strefa czasowa przeniesiona tu z toolbara plannera
+                (koło zębate zajęło jej dawne miejsce po prawej, patrz
+                PlannerGrid) — ten sam odczyt, ta plik i tak jest już "use
+                client" (patrz góra), więc bez osobnego child-componentu ani
+                mounted-effect guardu: Intl.resolvedOptions() zwraca tę samą
+                wartość na serwerze i w przeglądarce tego samego środowiska,
+                dokładnie jak dawny odczyt wprost w PlannerGrid. */}
+            <div>Strefa: {Intl.DateTimeFormat().resolvedOptions().timeZone}</div>
           </div>
         )}
       </nav>

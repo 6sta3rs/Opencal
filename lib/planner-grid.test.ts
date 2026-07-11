@@ -3,6 +3,7 @@ import {
   applyBlocksAction,
   bufferLabelMode,
   buildBacklogDropBody,
+  buildBufferResizePatch,
   buildMoveBlockPatch,
   buildMovePatch,
   buildQuickCreateBody,
@@ -11,10 +12,12 @@ import {
   computeGridSegments,
   dragRangeToDraft,
   focusBoundaryMinutes,
+  formatBufferLabel,
   getUnavailableRanges,
   getUnavailableRangesFromAvailability,
   getWeekDays,
   hhmmToMinutes,
+  initialScrollMinutes,
   isDayAvailableForCreate,
   isEdgeResizable,
   layoutOverlaps,
@@ -24,8 +27,26 @@ import {
   pixelOffsetToMinutes,
   shiftBlockTime,
   snapMinutes,
+  snapToNearestFreeSlot,
   swapWeekday,
+  type GridSegment,
 } from "./planner-grid";
+
+/** Segment minimalny do testów snapToNearestFreeSlot — tylko pola, na których operuje funkcja. */
+function seg(blockId: string, startMinutes: number, endMinutes: number, phase: GridSegment["phase"] = "shift"): GridSegment {
+  return {
+    blockId,
+    name: blockId,
+    type: "work",
+    staysOvernight: false,
+    phase,
+    day: "2026-07-06",
+    startMinutes,
+    endMinutes,
+    continuesFromPrevDay: false,
+    continuesToNextDay: false,
+  };
+}
 
 it("bufferLabelMode: <20min ukryty, 20-44min compact, >=45min full", () => {
   expect(bufferLabelMode(19)).toBe("hidden");
@@ -36,6 +57,29 @@ it("bufferLabelMode: <20min ukryty, 20-44min compact, >=45min full", () => {
 
 it("focusBoundaryMinutes: bez buforów daje tylko start/koniec zmiany", () => {
   expect(focusBoundaryMinutes({ startMinutes: 540, endMinutes: 600 })).toEqual([540, 600]);
+});
+
+// Fix 6: scroll startowy siatki przy montażu — patrz PlannerGrid (efekt z useRef guard).
+it("initialScrollMinutes: segmenty obecne -> najwcześniejszy start minus 30, przycięty do >=0", () => {
+  const segments = [{ startMinutes: 600 }, { startMinutes: 60 }, { startMinutes: 900 }];
+  expect(initialScrollMinutes(segments)).toBe(30);
+});
+
+it("initialScrollMinutes: przycina do 0, gdy najwcześniejszy start jest bliżej północy niż 30 min", () => {
+  expect(initialScrollMinutes([{ startMinutes: 10 }])).toBe(0);
+});
+
+it("initialScrollMinutes: brak segmentów -> najwcześniejsza włączona godzina dostępności", () => {
+  const availability = [
+    { dayOfWeek: 1, enabled: true, startTime: "09:00", endTime: "17:00" },
+    { dayOfWeek: 2, enabled: true, startTime: "07:30", endTime: "15:00" },
+    { dayOfWeek: 3, enabled: false, startTime: "00:00", endTime: "00:00" },
+  ];
+  expect(initialScrollMinutes([], availability)).toBe(450); // 07:30
+});
+
+it("initialScrollMinutes: brak segmentów i brak dostępności -> domyślne 08:00 (480 min)", () => {
+  expect(initialScrollMinutes([])).toBe(480);
 });
 
 it("focusBoundaryMinutes: oba bufory dają 4 granice posortowane rosnąco", () => {
@@ -999,4 +1043,120 @@ it("applyBlocksAction 'add' dokleja nowy blok na koniec listy", () => {
   const result = applyBlocksAction(blocks, { kind: "add", block: newBlock });
 
   expect(result).toEqual([blocks[0], newBlock]);
+});
+
+it("applyBlocksAction 'remove' usuwa blok o pasującym id", () => {
+  const blocks = [
+    { id: "a", name: "A", type: "work", startTime: "09:00", endTime: "17:00", daysOfWeek: [1], endDate: null },
+    { id: "b", name: "B", type: "course", startTime: "10:00", endTime: "11:00", daysOfWeek: [2], endDate: null },
+  ];
+
+  const result = applyBlocksAction(blocks, { kind: "remove", id: "a" });
+
+  expect(result).toEqual([blocks[1]]);
+});
+
+it("applyBlocksAction 'remove' na nieznane id nic nie zmienia", () => {
+  const blocks = [
+    { id: "a", name: "A", type: "work", startTime: "09:00", endTime: "17:00", daysOfWeek: [1], endDate: null },
+  ];
+
+  const result = applyBlocksAction(blocks, { kind: "remove", id: "nope" });
+
+  expect(result).toEqual(blocks);
+});
+
+it("snapToNearestFreeSlot: brak kolizji -> zwraca ten sam (zaokrąglony) start", () => {
+  const result = snapToNearestFreeSlot([], { startMinutes: 600, durationMinutes: 60, bufferBefore: 0, bufferAfter: 0 });
+  expect(result).toBe(600);
+});
+
+it("snapToNearestFreeSlot: kolizja dokładnie w żądanym miejscu -> przesuwa w dół (później) do najbliższego wolnego", () => {
+  const daySegments = [seg("morning", 0, 600), seg("midday", 600, 660)];
+  const result = snapToNearestFreeSlot(daySegments, { startMinutes: 600, durationMinutes: 60, bufferBefore: 0, bufferAfter: 0 });
+  expect(result).toBe(660);
+});
+
+it("snapToNearestFreeSlot: reszta dnia zajęta -> przesuwa w górę (wcześniej)", () => {
+  const daySegments = [seg("rest-of-day", 600, 1440)];
+  const result = snapToNearestFreeSlot(daySegments, { startMinutes: 600, durationMinutes: 60, bufferBefore: 0, bufferAfter: 0 });
+  expect(result).toBe(540);
+});
+
+it("snapToNearestFreeSlot: cały dzień zajęty -> null", () => {
+  const daySegments = [seg("full-day", 0, 1440)];
+  const result = snapToNearestFreeSlot(daySegments, { startMinutes: 600, durationMinutes: 60, bufferBefore: 0, bufferAfter: 0 });
+  expect(result).toBeNull();
+});
+
+it("snapToNearestFreeSlot: excludeBlockId ignoruje własne segmenty bloku", () => {
+  const daySegments = [seg("self", 600, 660)];
+  const result = snapToNearestFreeSlot(daySegments, {
+    startMinutes: 600,
+    durationMinutes: 60,
+    bufferBefore: 0,
+    bufferAfter: 0,
+    excludeBlockId: "self",
+  });
+  expect(result).toBe(600);
+});
+
+it("snapToNearestFreeSlot: bufor kandydata liczy się do obwiedni (kolizja mimo wolnego rdzenia)", () => {
+  const daySegments = [seg("other", 660, 720)];
+  // rdzeń 600-660 sam w sobie nie koliduje z other (660-720), ale bufferAfter=15
+  // rozciąga obwiednię kandydata do 675, co już zachodzi na other -> musi się przesunąć.
+  const result = snapToNearestFreeSlot(daySegments, {
+    startMinutes: 600,
+    durationMinutes: 60,
+    bufferBefore: 0,
+    bufferAfter: 15,
+  });
+  // Najbliższe wolne miejsce to 585 (15 min wcześniej: obwiednia 585-660,
+  // styka się z "other" 660-720 bez zachodzenia) — bliżej niż 540.
+  expect(result).toBe(585);
+});
+
+// Fix 4 (resize buforów za zewnętrzną krawędź scalonej karty): buforBefore/
+// buforAfter liczone z pozycji przeciąganej zewnętrznej krawędzi względem
+// stałej granicy zmiany (startTime/endTime nie ruszają się przy tym resize).
+it("buildBufferResizePatch: zewnętrzna górna krawędź (before) liczy bufferBefore od startu zmiany", () => {
+  const block = { startTime: "09:00", endTime: "17:00" };
+  expect(buildBufferResizePatch(block, "before", 8 * 60 + 30)).toEqual({ bufferBefore: 30 });
+});
+
+it("buildBufferResizePatch: zewnętrzna dolna krawędź (after) liczy bufferAfter od końca zmiany", () => {
+  const block = { startTime: "09:00", endTime: "17:00" };
+  expect(buildBufferResizePatch(block, "after", 17 * 60 + 30)).toEqual({ bufferAfter: 30 });
+});
+
+it("buildBufferResizePatch: przeciągnięcie 'before' za granicę startu zmiany przycina do 0", () => {
+  const block = { startTime: "09:00", endTime: "17:00" };
+  expect(buildBufferResizePatch(block, "before", 9 * 60 + 10)).toEqual({ bufferBefore: 0 });
+});
+
+it("buildBufferResizePatch: przeciągnięcie 'after' za granicę końca zmiany przycina do 0", () => {
+  const block = { startTime: "09:00", endTime: "17:00" };
+  expect(buildBufferResizePatch(block, "after", 16 * 60 + 50)).toEqual({ bufferAfter: 0 });
+});
+
+it("buildBufferResizePatch: znapuje przeciąganą minutę do 15-minutowej siatki", () => {
+  const block = { startTime: "09:00", endTime: "17:00" };
+  // 08:42 (522 min) znapowane do 08:45 (525) -> bufferBefore = 540-525 = 15
+  expect(buildBufferResizePatch(block, "before", 8 * 60 + 42)).toEqual({ bufferBefore: 15 });
+});
+
+// Fix (etykiety stref buforu): format podpisany znak + czas trwania + godzina
+// graniczna — "−20 min · 08:40" (dojazd, musisz wyjechać o 08:40) / "+25 min ·
+// 16:10" (odjazd, wolny dopiero o 16:10). Znak niesie kierunek, słowa
+// "Dojazd"/"Odjazd" celowo pominięte (patrz DESIGN.md).
+it("formatBufferLabel: pełny wariant 'before' ma minus, minuty, 'min' i godzinę graniczną", () => {
+  expect(formatBufferLabel("before", 20, "08:40", "full")).toBe("−20 min · 08:40");
+});
+
+it("formatBufferLabel: pełny wariant 'after' ma plus, minuty, 'min' i godzinę graniczną", () => {
+  expect(formatBufferLabel("after", 25, "16:10", "full")).toBe("+25 min · 16:10");
+});
+
+it("formatBufferLabel: wariant compact pomija słowo 'min' (mniej miejsca)", () => {
+  expect(formatBufferLabel("before", 20, "08:40", "compact")).toBe("−20 · 08:40");
 });

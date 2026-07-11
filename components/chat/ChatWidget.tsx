@@ -157,19 +157,28 @@ export function ChatWidget() {
 
   return (
     <>
+      {/* Fix 4: dymek siedział na stałe w prawym-dolnym rogu VIEWPORTU — od
+          przeniesienia sidebara plannera na prawą stronę zasłaniał go w
+          strefie edycji. `${styles.floatingAnchor}` przesuwa oba elementy w
+          lewo o szerokość TEGO konkretnego sidebara (custom property
+          ustawiana przez PlannerSidebar, patrz tam) — na stronach bez tego
+          sidebara zmienna jest nieustawiona, więc offset wraca do 0 (zwykły
+          prawy dół viewportu, jak dawniej). Dymek zostaje zamontowany
+          globalnie w AppShell (widoczny na każdej stronie) — przeniesienie go
+          do drzewa plannera zdjęłoby go z pozostałych stron. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Zamknij czat asystenta" : "Otwórz czat asystenta"}
         aria-expanded={open}
-        className="fixed right-6 bottom-6 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg"
+        className={`${styles.floatingAnchor} fixed bottom-6 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg`}
       >
         <MessageCircle className="h-6 w-6" aria-hidden />
       </button>
 
       <div
         data-open={open}
-        className={`${styles.panel} fixed right-6 bottom-24 z-50 flex h-[560px] w-[380px] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary`}
+        className={`${styles.panel} ${styles.floatingAnchor} fixed bottom-24 z-50 flex h-[560px] w-[380px] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary`}
       >
         <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
           <div className="flex items-center justify-between">

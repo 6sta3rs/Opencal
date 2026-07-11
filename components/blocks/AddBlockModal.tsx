@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Textarea } from "@/components/ui/textarea";
 import { validateBlockForm, validateOvernightRangeForm, type BlockFormErrors } from "@/lib/block-form-validation";
 
 const DAY_OPTIONS = [
@@ -40,7 +41,19 @@ type FormState = {
   staysOvernight: boolean;
   overnightStart: string;
   departureTime: string;
+  // Zmiana 5: cykliczny (co tydzień, "do odwołania") vs jednorazowy (przypięty
+  // do jednej daty) — checked = cykliczny (domyślne, dotychczasowe zachowanie
+  // tego modala, patrz komentarz przy AGENTS.md/AddBlockModal w tickecie).
+  repeatWeekly: boolean;
+  oneOffDate: string; // "YYYY-MM-DD"
+  note: string;
 };
+
+function todayDateKey(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 const EMPTY_FORM: FormState = {
   name: "",
@@ -53,6 +66,9 @@ const EMPTY_FORM: FormState = {
   staysOvernight: false,
   overnightStart: "",
   departureTime: "",
+  repeatWeekly: true,
+  oneOffDate: "",
+  note: "",
 };
 
 // Fix 2b: typ "overnight" (jednorazowy nocleg wielodniowy) używa pól
@@ -205,13 +221,22 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
         overnightStart: null,
         bufferBefore: Number(form.bufferBefore) || 0,
         bufferAfter: Number(form.bufferAfter) || 0,
+        note: form.note.trim() || null,
       };
     } else {
+      // Zmiana 5: jednorazowy (repeatWeekly odznaczony) przypina blok do
+      // JEDNEJ daty — daysOfWeek forsowany na dzień tygodnia tej daty (ta sama
+      // konwencja co buildQuickCreateBody w QuickCreatePopover), pole
+      // "Dni tygodnia" wtedy się nie liczy (ukryte w JSX niżej).
+      const oneOff = !form.repeatWeekly;
+      const oneOffDateObj = oneOff ? new Date(`${form.oneOffDate}T00:00:00`) : null;
+      const effectiveDaysOfWeek = oneOff ? [oneOffDateObj!.getDay()] : form.daysOfWeek;
+
       const validationErrors = validateBlockForm({
         name: form.name,
         startTime: form.startTime,
         endTime: form.endTime,
-        daysOfWeek: form.daysOfWeek,
+        daysOfWeek: effectiveDaysOfWeek,
       });
       if (Object.keys(validationErrors).length > 0) {
         setErrors(validationErrors);
@@ -225,8 +250,9 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
         type: form.type,
         startTime: form.startTime,
         endTime: form.endTime,
-        daysOfWeek: form.daysOfWeek,
-        endDate: null,
+        daysOfWeek: effectiveDaysOfWeek,
+        startDate: oneOff ? dateOnlyIsoMidnight(form.oneOffDate) : null,
+        endDate: oneOff ? dateOnlyIsoMidnight(form.oneOffDate) : null,
         bufferBefore: Number(form.bufferBefore) || 0,
         bufferAfter: Number(form.bufferAfter) || 0,
         staysOvernight: form.staysOvernight,
@@ -234,6 +260,7 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
           form.staysOvernight && form.overnightStart ? new Date(form.overnightStart).toISOString() : null,
         departureTime:
           form.staysOvernight && form.departureTime ? new Date(form.departureTime).toISOString() : null,
+        note: form.note.trim() || null,
       };
     }
 
@@ -340,6 +367,24 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
             )}
 
             {form.type !== "overnight" && (
+              // Zmiana 5: "Powtarzaj co tydzień" — ten sam wzorzec co
+              // QuickCreatePopover (drag-to-create), skopiowany tu żeby
+              // AddBlockModal też mógł tworzyć bloki jednorazowe (dotąd
+              // zawsze tworzył cykliczne, bez wyjątku).
+              <Label className="text-body text-text-primary">
+                <Checkbox
+                  checked={form.repeatWeekly}
+                  onCheckedChange={(checked) => {
+                    const repeatWeekly = checked === true;
+                    updateField("repeatWeekly", repeatWeekly);
+                    if (!repeatWeekly && !form.oneOffDate) updateField("oneOffDate", todayDateKey());
+                  }}
+                />
+                Powtarzaj co tydzień
+              </Label>
+            )}
+
+            {form.type !== "overnight" && form.repeatWeekly && (
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="text-sm font-medium text-text-primary">Dni tygodnia</legend>
                 <div className="flex flex-wrap gap-2">
@@ -361,6 +406,16 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
                   })}
                 </div>
               </fieldset>
+            )}
+
+            {/* Zmiana 5: jednorazowy — dzień tygodnia jest wtedy pochodną tej
+                daty (patrz handleSubmit), więc "Dni tygodnia" wyżej ustępuje miejsca. */}
+            {form.type !== "overnight" && !form.repeatWeekly && (
+              <DateOnlyPicker
+                label="Data"
+                value={form.oneOffDate || todayDateKey()}
+                onChange={(next) => updateField("oneOffDate", next)}
+              />
             )}
 
             {form.type === "overnight" && (
@@ -443,6 +498,15 @@ export function AddBlockModal({ open, onClose }: { open: boolean; onClose: () =>
               </>
             )}
 
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="block-note">Notatka</Label>
+              <Textarea
+                id="block-note"
+                value={form.note}
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) => updateField("note", e.target.value)}
+              />
+            </div>
+
             <p className="t-error-msg text-caption font-caption text-danger" role="alert">
               {bannerError}
             </p>
@@ -510,6 +574,43 @@ function DateTimePicker({
         </Popover>
         <Input type="time" className="w-28 shrink-0" value={timePart} onChange={(e: ChangeEvent<HTMLInputElement>) => setTime(e.target.value)} />
       </div>
+    </div>
+  );
+}
+
+// Zmiana 5: wariant DateTimePicker powyżej BEZ pola godziny — sam dzień
+// wystarcza dla "jednorazowy" (godzina i tak przychodzi z startTime/endTime
+// bloku, patrz handleSubmit), ten sam Popover+Calendar co tam.
+function DateOnlyPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const selectedDate = value ? new Date(`${value}T00:00:00`) : undefined;
+
+  function setDate(date: Date | undefined) {
+    if (!date) return;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    onChange(`${y}-${m}-${d}`);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>{label}</Label>
+      <Popover>
+        <PopoverTrigger render={<Button type="button" variant="outline" className="justify-start font-normal" />}>
+          <span className="truncate">{selectedDate ? selectedDate.toLocaleDateString("pl-PL") : "Wybierz datę"}</span>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <Calendar mode="single" selected={selectedDate} onSelect={setDate} />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
