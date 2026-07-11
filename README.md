@@ -1,4 +1,4 @@
-# Szychta — inteligentny kalendarz zmianowy
+# OpenCal — inteligentny kalendarz zmianowy
 
 Aplikacja do zarządzania nieregularnym grafikiem pracy (zmiany, kursy) z agentem AI szukającym wolnych okien oraz modułem time tracking + earnings. Ciemny motyw w duchu Cal.com, komponenty shadcn/ui.
 
