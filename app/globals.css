@@ -1,0 +1,318 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Design tokens generated from DESIGN.md via:
+   pnpm run design:export
+   Re-run that command and paste the output here if DESIGN.md changes. */
+@theme {
+  --color-bg-primary: #0a0a0a;
+  --color-bg-secondary: #111111;
+  --color-surface: #1c1c1c;
+  --color-border: #2e2e2e;
+  --color-text-primary: #f9fafb;
+  --color-text-secondary: #a1a1aa;
+  --color-primary: #f9fafb;
+  --color-on-primary: #0a0a0a;
+  --color-work-block: #3b82f6;
+  --color-course-block: #f59e0b;
+  --color-personal-block: #10b981;
+  --color-overnight-block: #6366f1;
+  --color-danger: #ef4444;
+  /* Pastelowe wypełnienia kart (Cal.com-style) — patrz DESIGN.md, sekcja
+     Colors. -bg to NIEPRZEZROCZYSTY kolor (color-mix barwy z tłem aplikacji),
+     żeby karta zasłaniała to, co pod nią (np. bufory dojazdu/powrotu); -text to
+     jaśniejszy odcień tej samej barwy, nie sam kolor bazowy. */
+  --color-work-block-bg: #132034; /* = 18% work-block na bg-primary */
+  --color-work-block-text: #93c5fd;
+  --color-course-block-bg: #30220a; /* = 16% course-block na bg-primary */
+  --color-course-block-text: #fcd34d;
+  --color-personal-block-bg: #0b261d; /* = 16% personal-block na bg-primary */
+  --color-personal-block-text: #6ee7b7;
+  --color-overnight-block-bg: #131321; /* = 10% overnight-block na bg-primary */
+  --color-overnight-block-text: #a5b4fc;
+  --font-h1: "Inter";
+  --font-h2: "Inter";
+  --font-h3: "Inter";
+  --font-body-large: "Inter";
+  --font-body: "Inter";
+  --font-caption: "Inter";
+  --font-numeric: "Inter";
+  --text-h1: 2rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.25rem;
+  --text-body-large: 1rem;
+  --text-body: 0.875rem;
+  --text-caption: 0.75rem;
+  --text-numeric: 0.875rem;
+  --font-weight-h1: 700;
+  --font-weight-h2: 600;
+  --font-weight-h3: 600;
+  --font-weight-body-large: 400;
+  --font-weight-body: 400;
+  --font-weight-caption: 400;
+  --font-weight-numeric: 500;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  /* --spacing-xs..xl z eksportu DESIGN.md celowo USUNIĘTE: w Tailwind 4
+     utility szerokości (max-w-, w-) najpierw sięgają do skali spacing, więc
+     te tokeny po cichu zamieniały max-w-xl w 32px, max-w-md w 16px i
+     max-w-xs w 4px (zwężone modale, panel zarobków, tooltipy). Żaden
+     komponent nie używa klas p-md/gap-lg itp., a wartości odstępów DESIGN.md
+     pokrywają się ze standardową skalą Tailwinda (4/8/16/24/32px). */
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  /* --radius-sm/md/lg/xl: deliberately NOT redefined here. shadcn's default
+     recipe derives these from --radius via calc(), but that duplicate-key
+     definition silently wins over the DESIGN.md @theme block above (last
+     @theme declaration in source order wins in Tailwind 4's theme merge) —
+     this is the radius half of the same collision documented below for
+     --primary/--border. Confirmed by inspecting computed styles: with the
+     calc() lines present, rounded-sm rendered 4.8px instead of DESIGN.md's
+     8px. Leaving them undefined here lets rounded-sm/md/lg/xl resolve to the
+     literal --radius-sm/md/lg/xl px values from DESIGN.md instead. Only the
+     larger steps shadcn ships that DESIGN.md doesn't define (2xl/3xl/4xl,
+     used by badge's rounded-4xl pill) still derive from --radius below. */
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar w stylu Cal.com: ciemna rynna, jasny zaokrąglony uchwyt
+   (kolory wyłącznie z palety DESIGN.md). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-text-secondary) var(--color-bg-primary);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-text-secondary);
+  border-radius: 9999px;
+  border: 2px solid var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-primary);
+}
+
+/* Blok noclegu (staysOvernight): CZYSTA poświata, bez tekstu i bez wypełnienia
+   tła (decyzja użytkownika 2026-07-10) — kolor poświaty ustawia
+   PlannerGrid.tsx#BlockCard przez --glow-color na kolor WŁASNEGO typu bloku
+   (praca/kurs/prywatne), nie stały fiolet; fallback tutaj (gdy --glow-color
+   nieustawiony) to stary kolor overnight-block, na wypadek typu spoza mapy. */
+.overnight-glow {
+  box-shadow: inset 0 0 28px var(--glow-color, color-mix(in srgb, var(--color-overnight-block) 25%, transparent));
+}
+
+/* Strefy dojazdu/odjazdu (Task A) na karcie bloku — skośne paski w kolorze
+   WŁASNEGO typu bloku, ustawianym inline przez PlannerGrid.tsx#BlockCard
+   przez --stripe-color (color-mix z color-work-block/course-block/
+   personal-block). Też na karcie noclegu, dla jej własnej strefy dojazdu do
+   miejsca noclegu / odjazdu po wyjeździe (Task B). */
+.buffer-stripes {
+  background-image: repeating-linear-gradient(45deg, var(--stripe-color, transparent) 0 6px, transparent 6px 14px);
+}
+
+/* transitions-dev — modal open/close (AddBlockModal) + error state shake
+   (form validation). Only the two snippets actually used; add the rest of
+   the universal :root block if another component needs them.
+
+   shadcn/ui semantic tokens (--background, --primary, --border, …) are mapped
+   directly to the DESIGN.md dark palette above so every shadcn component
+   (Button, Dialog, Input, …) renders in the app's single dark theme without
+   a .dark class — this app has no light mode (product decision, see AGENTS.md). */
+:root {
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+
+  --background: var(--color-bg-primary);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text-primary);
+  /* --primary / --border: NIE "var(--color-primary)" / "var(--color-border)".
+     DESIGN.md tokeny "primary" i "border" mają te same nazwy co zarezerwowane
+     sloty shadcn — shadcn's `@theme inline` już definiuje
+     `--color-primary: var(--primary)` / `--color-border: var(--border)`, więc
+     odwołanie w drugą stronę tworzy cykl (--color-primary -> --primary ->
+     --color-primary), który CSS traktuje jako invalid. Literalny hex (ten sam
+     co DESIGN.md colors.primary/border) omija cykl. */
+  --primary: #f9fafb;
+  --primary-foreground: var(--color-on-primary);
+  --secondary: var(--color-bg-secondary);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-bg-secondary);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-bg-secondary);
+  --accent-foreground: var(--color-text-primary);
+  --destructive: var(--color-danger);
+  --border: #2e2e2e;
+  --input: #2e2e2e;
+  --ring: var(--color-text-secondary);
+  --radius: 0.5rem;
+}
+
+.t-modal {
+  transform-origin: center;
+  transform: scale(var(--modal-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
+}
+.t-modal.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-modal.is-closing {
+  transform: scale(var(--modal-scale-close));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity var(--modal-close-dur) var(--modal-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-modal {
+    transition: none !important;
+  }
+}
+
+.t-input {
+  transition: border-color 150ms ease-out;
+  will-change: transform;
+}
+.t-input.is-error {
+  transition: border-color var(--revert-dur, 280ms) ease-out;
+}
+
+.t-error-msg {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear var(--revert-dur, 280ms);
+}
+.t-input-wrap.is-error .t-error-msg {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear 0s;
+}
+
+.t-input.is-shaking {
+  animation: t-input-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear;
+}
+@keyframes t-input-shake {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: var(--shake-ease);
+  }
+  28.57% {
+    transform: translateX(var(--shake-distance));
+    animation-timing-function: var(--shake-ease);
+  }
+  57.14% {
+    transform: translateX(calc(var(--shake-distance) * -1));
+    animation-timing-function: var(--shake-ease);
+  }
+  78.57% {
+    transform: translateX(var(--shake-overshoot));
+    animation-timing-function: var(--shake-ease);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-input {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

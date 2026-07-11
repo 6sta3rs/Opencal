@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model RecurringBlock {
+  id         String    @id @default(cuid())
+  name       String
+  type       String
+  startTime  String
+  endTime    String
+  daysOfWeek   Int[]
+  startDate    DateTime?
+  endDate      DateTime?
+  bufferBefore  Int       @default(0)
+  bufferAfter   Int       @default(0)
+  staysOvernight Boolean  @default(false)
+  departureTime DateTime?
+  overnightStart DateTime?
+  isPaused      Boolean   @default(false)
+  exceptions    BlockInstanceException[]
+}
+
+// Pozycja backlogu: rzecz do zrobienia bez przypisanego terminu.
+// Zaplanowanie = ustawione scheduledStart/scheduledEnd (jednorazowy event w kalendarzu).
+model BacklogItem {
+  id              String    @id @default(cuid())
+  name            String
+  durationMinutes Int
+  deadline        DateTime?
+  priority        String
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+}
+
+// Wpis czasu pracy. Earnings NIE jest kolumną — wyliczane w locie z pól
+// poniżej (patrz lib/earnings.ts), żeby nie rozjeżdżało się z edycją.
+model TimeEntry {
+  id            String   @id @default(cuid())
+  blockId       String?
+  start         DateTime
+  end           DateTime
+  breakDuration Int      @default(0)
+  hourlyRate    Float
+  additionalPay Float    @default(0)
+  client        String?
+  project       String?
+  task          String?
+  note          String?
+  isDraft       Boolean  @default(false)
+  lineItems     EarningsLineItem[]
+
+  // ponytail: dedup szkiców po (blockId, start) — jedna instancja zmiany ma
+  // jeden start; blockId nullable więc ręczne wpisy (bez blocku) nie są
+  // ograniczone tą unikalnością (NULL != NULL w Postgres)
+  @@unique([blockId, start])
+}
+
+// Dodatkowa pozycja zarobku dopisywana do wpisu (nadgodziny, premia, dodatek nocny).
+model EarningsLineItem {
+  id      String    @id @default(cuid())
+  entryId String
+  entry   TimeEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  label   String
+  amount  Float
+}
+
+// Konfigurowalne godziny dostępności per dzień tygodnia (0=niedziela..6=sobota,
+// Date#getDay). Zastępuje dawną hardkodowaną stałą "niedostępnych godzin" w plannerze.
+model Availability {
+  dayOfWeek Int     @id
+  enabled   Boolean
+  startTime String
+  endTime   String
+}
+
+// Wyjątek dla pojedynczej instancji serii: nadpisane godziny albo odwołanie dnia.
+model BlockInstanceException {
+  id        String   @id @default(cuid())
+  blockId   String
+  block     RecurringBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  date      DateTime
+  startTime String?
+  endTime   String?
+  cancelled Boolean  @default(false)
+
+  @@unique([blockId, date])
+}

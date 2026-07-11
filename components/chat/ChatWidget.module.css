@@ -1,0 +1,75 @@
+/*
+ * transitions-dev "panel reveal" pattern (fade + slide-up + cross-blur),
+ * scoped locally since app/globals.css (the shared :root install block) is
+ * owned by a concurrent agent right now — same approach previously used in
+ * the retired components/agent/AgentPanel.module.css.
+ */
+.panel {
+  --panel-open-dur: 250ms;
+  --panel-close-dur: 200ms;
+  --panel-translate-y: 12px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  /* visibility z opóźnieniem równym animacji zamykania: zamknięty panel
+     wypada z tab-orderu i drzewa dostępności, nie tylko z widoku. */
+  visibility: hidden;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity var(--panel-close-dur) var(--panel-ease),
+    filter var(--panel-close-dur) var(--panel-ease),
+    visibility 0s linear var(--panel-close-dur);
+  will-change: transform, opacity, filter;
+}
+
+.panel[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity var(--panel-open-dur) var(--panel-ease),
+    filter var(--panel-open-dur) var(--panel-ease),
+    visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none !important;
+  }
+}
+
+/* Karta sugestii terminu — fade + slide-up ze staggerem, przeniesione
+   1:1 z retired components/agent/AgentPanel.module.css. */
+.suggestionCard {
+  --card-reveal-dur: 300ms;
+  --card-reveal-distance: 12px;
+  --card-reveal-stagger: 60ms;
+  --card-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  animation: cardRevealIn var(--card-reveal-dur) var(--card-reveal-ease) both;
+  animation-delay: calc(var(--card-reveal-index, 0) * var(--card-reveal-stagger));
+  will-change: transform, opacity;
+}
+
+@keyframes cardRevealIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--card-reveal-distance));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggestionCard {
+    animation: none !important;
+  }
+}
