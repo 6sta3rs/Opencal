@@ -1,3 +1,15 @@
+# OpenCal — shift calendar with an AI assistant
+
+A calendar for people with irregular schedules (shifts, night shifts, courses). Recurring blocks show the whole week at a glance, a backlog holds tasks without a date, and an AI chat (Claude or Gemini) finds free time slots and suggests when to do them. A time-tracking module calculates earnings from hours, breaks and extra pay.
+
+![Weekly planner with shifts, a course, recurring blocks and a task backlog](docs/screenshots/planner.png)
+
+**Stack:** Next.js 16 · TypeScript · Tailwind 4 · shadcn/ui · Prisma 7 + PostgreSQL 16 · Vitest + Playwright · Claude API + Gemini API
+
+The interface is in Polish. Sample data in the screenshot is fictional.
+
+---
+
 # OpenCal — inteligentny kalendarz zmianowy
 
 Aplikacja do zarządzania nieregularnym grafikiem pracy (zmiany, kursy) z agentem AI szukającym wolnych okien oraz modułem time tracking + earnings. Ciemny motyw w duchu Cal.com, komponenty shadcn/ui.
